@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 # tpl imports
 import torch
-from transformers import pipeline
+from transformers import BitsAndBytesConfig, pipeline
 
 # local imports
 from utils import BalancedBracketsCriteria, PromptDataset, clean_output, get_inference_config
@@ -93,12 +93,17 @@ if not args.restart and args.restore_from and os.path.exists(args.restore_from):
 """ Initialize inference config """
 inference_config = get_inference_config(args.model, prompted=args.prompted)
 
+bnb = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype="float16"
+)
+
 # to use a torch.utils.data.DataSet with the HuggingFace pipeline, we need to flatten out the prompts
 # and repeat them for however many samples we want to generate per prompt
 prompts_repeated = [p for p in prompts for _ in range(args.num_samples_per_prompt)]
 
 """ Initialize HuggingFace pipeline for generation """
-generator = pipeline(task="text-generation", model=args.model, torch_dtype=inference_config.get_dtype(), device=0, token=args.hf_token)
+generator = pipeline(task="text-generation", model=args.model, torch_dtype=inference_config.get_dtype(), token=args.hf_token, model_kwargs={"device_map": "auto", "quantization_config": bnb})
 inference_config.init_padding(generator.tokenizer)
 
 """ Create a prompt data set to pass to generate method """
